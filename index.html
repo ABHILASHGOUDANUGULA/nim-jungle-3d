@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#103b2c" />
+  <meta name="description" content="NIM Jungle 3D — a Class 4 maths adventure where you race to the target number and discover a winning strategy." />
+  <title>NIM Jungle 3D — Maths Adventure</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="./style.css" />
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.187.0/build/three.module.js"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div class="app-shell">
+
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark">🌿</span>
+        <div>
+          <strong>NIM JUNGLE</strong>
+          <small>3D Maths Adventure</small>
+        </div>
+      </div>
+      <nav class="top-actions">
+        <button class="small-btn" id="soundBtn" aria-pressed="true" title="Toggle sound">🔊 Sound</button>
+        <button class="small-btn" id="helpBtn">❔ How to play</button>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero-row">
+        <div>
+          <div class="eyebrow">CLASS 4 · CHAPTER 10</div>
+          <h1>Race to <span id="targetTitle">10</span>! <span class="title-animal">🐯</span></h1>
+          <p class="hero-sub">Click a glowing stone to move. Think ahead. Reach the target!</p>
+        </div>
+        <div class="streak-pill" id="starPill">
+          <span>⭐</span>
+          <span id="starCount">0</span>
+          <small>stars earned</small>
+        </div>
+      </section>
+
+      <section class="game-layout">
+        <div class="scene-card">
+          <div class="scene-top">
+            <div class="location-pill">🌳 Jungle clearing</div>
+            <div class="scene-tip" id="sceneTip">Your adventure begins!</div>
+          </div>
+          <div id="scene" aria-label="3D animated jungle scene with a number path" role="img"></div>
+          <div class="scene-bottom">
+            <div class="animal-badge" id="animalBadge">🐘</div>
+            <div>
+              <strong id="characterName">Jungle friends</strong>
+              <small id="characterMood">Ready to play?</small>
+            </div>
+            <div class="scene-controls">
+              <button id="cameraBtn" class="icon-btn" title="Change camera angle (R)" aria-label="Change camera angle">↻</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="game-card">
+          <div class="game-card-header">
+            <div>
+              <span class="eyebrow">CURRENT GAME</span>
+              <h2 id="modeTitle">Play vs Computer</h2>
+            </div>
+            <span class="live-tag"><i></i> LIVE</span>
+          </div>
+
+          <div class="total-wrap">
+            <small>Current total</small>
+            <div class="big-total" id="total" aria-live="polite">0</div>
+            <div class="target-caption">Target <strong id="targetDisplay">10</strong></div>
+          </div>
+
+          <div class="progress-track" id="progressTrack" aria-label="Number progress"></div>
+
+          <div class="turn-box">
+            <div class="turn-avatar" id="turnAvatar">🐘</div>
+            <div>
+              <strong id="turnLabel">Player 1's turn</strong>
+              <small id="turnSub">Choose a glowing stone or a move button</small>
+            </div>
+            <span class="turn-chip" id="turnChip">YOUR TURN</span>
+          </div>
+
+          <div class="move-label">Choose your move (or click a stone)</div>
+          <div class="move-buttons" id="moveButtons"></div>
+
+          <div class="hint-area">
+            <button class="hint-btn" id="hintBtn">💡 Give me a hint</button>
+            <div id="hintText" class="hint-text" hidden></div>
+          </div>
+
+          <div class="game-footer">
+            <button class="primary-btn" id="newGameBtn">↻ New game</button>
+            <button class="secondary-btn" id="undoBtn" disabled>↶ Undo</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="lower-grid">
+        <div class="panel strategy-panel">
+          <div class="panel-heading">
+            <span>🧠</span>
+            <div>
+              <h3>Think like a mathematician</h3>
+              <p>Can you discover the pattern?</p>
+            </div>
+          </div>
+          <div class="strategy-steps" id="strategySteps">
+            <span class="strategy-number">?</span>
+            <span class="strategy-arrow">→</span>
+            <span class="strategy-number">?</span>
+            <span class="strategy-arrow">→</span>
+            <span class="strategy-number">?</span>
+            <span class="strategy-arrow">→</span>
+            <span class="strategy-number">10</span>
+          </div>
+          <p class="strategy-note">Look for totals that help you control the game. Try different moves and observe!</p>
+          <button class="text-btn" id="strategyReveal">Reveal a strategy ▸</button>
+          <div id="strategyExplanation" hidden></div>
+        </div>
+
+        <div class="panel history-panel">
+          <div class="panel-heading">
+            <span>📋</span>
+            <div>
+              <h3>Move history</h3>
+              <p>Watch how the total changes</p>
+            </div>
+          </div>
+          <div class="history-list" id="historyList">
+            <div class="empty-history">Your moves will appear here.</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="challenge-strip">
+        <div class="challenge-intro">
+          <div class="challenge-icon">🏆</div>
+          <div>
+            <h3>Textbook challenges</h3>
+            <p>Can you win from these starting totals?</p>
+          </div>
+        </div>
+        <div class="challenge-buttons">
+          <button data-start="6">Start at 6</button>
+          <button data-start="7">Start at 7</button>
+          <button data-start="8">Start at 8</button>
+        </div>
+      </section>
+
+      <section class="settings-panel panel">
+        <div class="panel-heading">
+          <span>⚙️</span>
+          <div>
+            <h3>Game settings</h3>
+            <p>Make your own maths challenge</p>
+          </div>
+        </div>
+        <div class="settings-grid">
+          <label>Target number
+            <input id="targetInput" type="number" min="3" max="100" value="10" />
+          </label>
+          <label>Allowed moves
+            <select id="movesSelect">
+              <option value="1,2">Add 1 or 2</option>
+              <option value="1,2,3">Add 1, 2 or 3</option>
+              <option value="1,2,3,4">Add 1, 2, 3 or 4</option>
+            </select>
+          </label>
+          <label>Opponent
+            <select id="opponentSelect">
+              <option value="smart">Smart Tiger (strategy)</option>
+              <option value="easy">Friendly Elephant (random)</option>
+              <option value="two">Two players</option>
+            </select>
+          </label>
+          <label>Starting total
+            <input id="startInput" type="number" min="0" value="0" />
+          </label>
+        </div>
+        <button class="primary-btn settings-apply" id="applySettings">Apply &amp; start</button>
+      </section>
+
+      <section class="footer-note">
+        Designed for curious minds · Maths through play · <span>PM SHRI classroom friendly</span>
+        <div class="keyboard-hint">
+          Keyboard: <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> move · <kbd>H</kbd> hint · <kbd>U</kbd> undo · <kbd>N</kbd> new · <kbd>R</kbd> camera
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="modal-backdrop" id="modal" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <button class="modal-close" id="closeModal" aria-label="Close">×</button>
+      <div class="modal-emoji">🌴🐘🐯🐆</div>
+      <h2 id="modalTitle">How to play NIM Jungle</h2>
+      <div id="modalBody">
+        <ol>
+          <li>Start at 0 (or the challenge number).</li>
+          <li>On your turn, <strong>click a glowing stone</strong> or use the +1 / +2 buttons to add to the total.</li>
+          <li>Players take turns. Try to reach <strong>10 exactly</strong>.</li>
+          <li>The player who lands on the target wins!</li>
+        </ol>
+        <p>Watch the animals leap, follow the camera, and look for the pattern. Can you discover a winning strategy?</p>
+      </div>
+      <button class="primary-btn" id="modalOkay">Let's play!</button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" aria-live="polite"></div>
+
+  <div class="load-warn" id="loadWarn" hidden>
+    ⚠️ The 3D library could not load. Check your internet connection, then reload the page.
+    The move buttons on the right still work.
+  </div>
+
+  <script>
+    window.addEventListener('load', function () {
+      setTimeout(function () {
+        if (!window.__NIM_READY) {
+          var el = document.getElementById('loadWarn');
+          if (el) el.hidden = false;
+        }
+      }, 9000);
+    });
+  </script>
+
+  <script type="module" src="./main.js"></script>
+</body>
+</html>

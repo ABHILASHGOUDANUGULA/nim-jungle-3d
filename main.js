@@ -2,6 +2,7 @@ import * as THREE from 'three';
 
 // ============================================================
 // NIM JUNGLE 3D — Fully interactive 3D maths adventure
+// BUG-FIXED BUILD
 // ============================================================
 
 const $ = (id) => document.getElementById(id);
@@ -12,6 +13,7 @@ let soundOn = true;
 let audioCtx = null;
 let cameraMode = 0;
 let stars = 0;
+let computerTimer = null;
 
 const state = {
   target: 10,
@@ -25,14 +27,21 @@ const state = {
   snapshots: [],
   gameOver: false,
   busy: false,
-  lastMove: null,
-  hintCount: 0,
 };
+
+// FIX #5 – single source of truth for "is it the human's turn right now?"
+function isHumanTurn() {
+  return (
+    !state.gameOver &&
+    !state.busy &&
+    (state.turn === 0 || state.opponent === 'two')
+  );
+}
 
 // ---------- Renderer ----------
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-renderer.setSize(sceneHost.clientWidth, sceneHost.clientHeight);
+renderer.setSize(sceneHost.clientWidth || 600, sceneHost.clientHeight || 445);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -47,7 +56,7 @@ scene.fog = new THREE.Fog(0x9ed4c6, 16, 38);
 
 const camera = new THREE.PerspectiveCamera(
   38,
-  sceneHost.clientWidth / sceneHost.clientHeight,
+  (sceneHost.clientWidth || 600) / (sceneHost.clientHeight || 445),
   0.1,
   100
 );
@@ -119,7 +128,7 @@ clearing.position.y = 0.005;
 clearing.receiveShadow = true;
 scene.add(clearing);
 
-// ---------- Scenery: trees & plants ----------
+// ---------- Scenery ----------
 function makeTree(x, z, scale = 1) {
   const g = new THREE.Group();
   g.position.set(x, 0, z);
@@ -158,7 +167,6 @@ function makeTree(x, z, scale = 1) {
   [5, -9, 1.2],
 ].forEach(([x, z, s]) => makeTree(x, z, s));
 
-// Small plants
 for (let i = 0; i < 28; i++) {
   const p = new THREE.Group();
   const x = Math.random() * 24 - 12;
@@ -184,23 +192,18 @@ for (let i = 0; i < 28; i++) {
   scene.add(p);
 }
 
-// Stones
 for (let i = 0; i < 18; i++) {
   const r = new THREE.Mesh(
     new THREE.DodecahedronGeometry(0.25 + Math.random() * 0.28, 0),
     mats.rock
   );
-  r.position.set(
-    Math.random() * 18 - 9,
-    0.15,
-    Math.random() * 14 - 7
-  );
+  r.position.set(Math.random() * 18 - 9, 0.15, Math.random() * 14 - 7);
   r.scale.y = 0.5 + Math.random();
   r.castShadow = true;
   scene.add(r);
 }
 
-// ---------- Helper: sphere / capsule ----------
+// ---------- Helpers ----------
 function sphere(parent, color, pos, scale, rough = 0.8) {
   const m = new THREE.Mesh(
     new THREE.SphereGeometry(1, 18, 12),
@@ -223,7 +226,7 @@ function capsule(parent, color, a, b, r) {
     new THREE.CylinderGeometry(r, r, d.length(), 10),
     mat(color)
   );
-  mesh.position.copy(A.add(B).multiplyScalar(0.5));
+  mesh.position.copy(A.clone().add(B).multiplyScalar(0.5)); // FIX: don't mutate A
   mesh.quaternion.setFromUnitVectors(
     new THREE.Vector3(0, 1, 0),
     d.normalize()
@@ -233,11 +236,10 @@ function capsule(parent, color, a, b, r) {
 
   sphere(parent, color, a, [r, r, r]);
   sphere(parent, color, b, [r, r, r]);
-
   return mesh;
 }
 
-// ---------- Procedural animals ----------
+// ---------- Animals ----------
 function createElephant() {
   const root = new THREE.Group();
   root.position.set(-2.8, 0, 0);
@@ -266,11 +268,13 @@ function createElephant() {
 
   capsule(root, 0xffe7a8, [1.35, 1.08, 0.34], [1.64, 1.22, 0.36], 0.08);
   capsule(root, 0xffe7a8, [1.35, 1.08, -0.34], [1.64, 1.22, -0.36], 0.08);
-
   capsule(root, 0x85969a, [-1.1, 1.35, 0], [-1.5, 1.1, 0], 0.055);
 
-  root.userData.anim = 1;
   root.userData.baseY = 0.03;
+  root.userData.baseX = -2.8;
+  root.userData.yOffset = 0;
+  root.userData.xOffset = 0;
+  root.userData.rotOffset = 0;
   scene.add(root);
   return root;
 }
@@ -314,8 +318,11 @@ function createTiger() {
   capsule(root, 0xe88d32, [-0.95, 1.2, 0], [-1.45, 1.5, 0], 0.075);
   capsule(root, 0x2b2721, [-1.45, 1.5, 0], [-1.65, 1.7, 0], 0.08);
 
-  root.userData.anim = 2;
   root.userData.baseY = 0.03;
+  root.userData.baseX = 2.65;
+  root.userData.yOffset = 0;
+  root.userData.xOffset = 0;
+  root.userData.rotOffset = 0;
   scene.add(root);
   return root;
 }
@@ -351,8 +358,11 @@ function createLeopard() {
 
   capsule(root, 0xd6a64e, [-0.9, 1.1, 0], [-1.4, 1.35, 0], 0.07);
 
-  root.userData.anim = 3;
   root.userData.baseY = 0.03;
+  root.userData.baseX = 0;
+  root.userData.yOffset = 0;
+  root.userData.xOffset = 0;
+  root.userData.rotOffset = 0;
   scene.add(root);
   return root;
 }
@@ -360,36 +370,50 @@ function createLeopard() {
 const elephant = createElephant();
 const tiger = createTiger();
 const leopard = createLeopard();
-
 const animalGroups = [elephant, tiger, leopard];
 
-// ---------- 3D Number Path (interactive stones) ----------
+// ---------- 3D Number Path ----------
 const pathStones = [];
-const stoneRadius = 0.52;
-let pathGroup = new THREE.Group();
+const pathGroup = new THREE.Group();
 scene.add(pathGroup);
 
-function buildNumberPath() {
-  // Remove old stones
+// FIX #9 – proper disposal of geometries & textures
+function disposePathGroup() {
+  pathGroup.children.forEach((child) => {
+    if (child.geometry) child.geometry.dispose();
+    if (child.material) {
+      if (child.material.map) child.material.map.dispose();
+      child.material.dispose();
+    }
+  });
   pathGroup.clear();
   pathStones.length = 0;
+}
+
+function buildNumberPath() {
+  disposePathGroup();
 
   const t = state.target;
   const count = t + 1;
-  // Spread the numbers across a gentle arc in front of the animals.
+
+  // FIX #12 – scale down stones when count is large so they don't overlap
+  const baseRadius = 0.52;
+  const fit = Math.min(1, 14 / count);
+  const sr = baseRadius * Math.max(0.32, fit);
+
   const arcWidth = 9;
   const startX = -arcWidth / 2;
   const stepX = arcWidth / Math.max(1, count - 1);
 
   for (let i = 0; i < count; i++) {
     const x = startX + stepX * i;
-    // Gentle arc: lift the middle slightly
     const z = 2.6 - Math.abs(x) * 0.08;
-    const y = 0.3 + stoneRadius;
+    const y = 0.3 + sr;
 
-    const stoneMat = i === t ? mats.stoneTarget.clone() : mats.stoneGlow.clone();
+    const isTarget = i === t;
+    const stoneMat = isTarget ? mats.stoneTarget.clone() : mats.stoneGlow.clone();
     const stone = new THREE.Mesh(
-      new THREE.IcosahedronGeometry(stoneRadius, 1),
+      new THREE.IcosahedronGeometry(sr, 1),
       stoneMat
     );
     stone.position.set(x, y, z);
@@ -398,10 +422,8 @@ function buildNumberPath() {
     stone.userData.number = i;
     stone.userData.baseY = y;
 
-    // Number label as a sprite (canvas texture)
-    const label = makeNumberSprite(i, i === t);
-    label.position.set(x, y + stoneRadius + 0.45, z);
-    label.userData.isLabel = true;
+    const label = makeNumberSprite(i, isTarget, sr);
+    label.position.set(x, y + sr + 0.45, z);
 
     pathGroup.add(stone);
     pathGroup.add(label);
@@ -409,12 +431,11 @@ function buildNumberPath() {
     pathStones.push({ stone, label, number: i, baseY: y });
   }
 
-  // Ground markers (small discs under each stone)
   for (let i = 0; i < count; i++) {
     const x = startX + stepX * i;
     const z = 2.6 - Math.abs(x) * 0.08;
     const disc = new THREE.Mesh(
-      new THREE.CircleGeometry(0.7, 20),
+      new THREE.CircleGeometry(sr * 1.35, 20),
       new THREE.MeshBasicMaterial({
         color: 0x4a7a5a,
         transparent: true,
@@ -429,13 +450,12 @@ function buildNumberPath() {
   updatePathVisuals();
 }
 
-function makeNumberSprite(number, isTarget) {
+function makeNumberSprite(number, isTarget, sr = 0.52) {
   const canvas = document.createElement('canvas');
   canvas.width = 128;
   canvas.height = 128;
   const ctx = canvas.getContext('2d');
 
-  // Rounded badge
   ctx.beginPath();
   const r = 30;
   ctx.moveTo(r, 0);
@@ -469,7 +489,8 @@ function makeNumberSprite(number, isTarget) {
     depthTest: false,
   });
   const sprite = new THREE.Sprite(material);
-  sprite.scale.set(0.9, 0.9, 1);
+  const s = 0.9 * Math.max(0.55, sr / 0.52);
+  sprite.scale.set(s, s, 1);
   return sprite;
 }
 
@@ -481,12 +502,8 @@ function updatePathVisuals() {
     const isCurrent = n === state.total;
     const isTarget = n === state.target;
     const isReachable =
-      !state.gameOver &&
-      !state.busy &&
-      state.turn === 0 &&
-      state.moves.some((m) => n === state.total + m);
+      isHumanTurn() && state.moves.some((m) => n === state.total + m);
 
-    // Color based on state
     if (isTarget) {
       p.stone.material.color.setHex(0xffd86b);
       p.stone.material.emissive.setHex(0xd4a017);
@@ -505,15 +522,13 @@ function updatePathVisuals() {
       p.stone.material.emissiveIntensity = 0;
     }
 
-    // Scale: current stone slightly larger
     const targetScale = isCurrent ? 1.18 : 1;
-    p.stone.scale.setScalar(
-      p.stone.scale.x + (targetScale - p.stone.scale.x) * 0.15
-    );
+    const s = p.stone.scale.x + (targetScale - p.stone.scale.x) * 0.15;
+    p.stone.scale.setScalar(s);
   });
 }
 
-// ---------- Fireflies (particle system) ----------
+// ---------- Fireflies ----------
 const fireflies = [];
 for (let i = 0; i < 24; i++) {
   const f = new THREE.Mesh(
@@ -533,12 +548,13 @@ for (let i = 0; i < 24; i++) {
   });
 }
 
-// ---------- Raycaster for clicking 3D stones ----------
+// ---------- Raycaster ----------
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
 
 function onSceneClick(event) {
-  if (state.gameOver || state.busy || state.turn !== 0) return;
+  // FIX #5 – allow clicks on Player 2's turn in two-player mode
+  if (!isHumanTurn()) return;
 
   const rect = sceneHost.getBoundingClientRect();
   pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
@@ -552,11 +568,13 @@ function onSceneClick(event) {
   if (hits.length > 0) {
     const n = hits[0].object.userData.number;
     const delta = n - state.total;
-    if (state.moves.includes(delta) && delta > 0) {
+    if (delta > 0 && state.moves.includes(delta)) {
       playMove(delta);
+    } else if (delta === 0) {
+      showToast(`You're already at ${state.total}. Try +${state.moves.join(' or +')}.`);
     } else {
       showToast(
-        `That stone is ${delta > 0 ? '+' + delta : 'not reachable'}. Try +${state.moves.join(' or +')}.`
+        `That stone is ${delta > 0 ? '+' + delta + ' away' : 'behind you'}. Try +${state.moves.join(' or +')}.`
       );
     }
   }
@@ -566,8 +584,8 @@ sceneHost.addEventListener('click', onSceneClick);
 
 // ---------- Resize ----------
 function resize() {
-  const w = sceneHost.clientWidth;
-  const h = sceneHost.clientHeight;
+  const w = sceneHost.clientWidth || 600;
+  const h = sceneHost.clientHeight || 445;
   renderer.setSize(w, h);
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
@@ -577,18 +595,9 @@ window.addEventListener('resize', resize);
 // ---------- Camera modes ----------
 const cameraPresets = [
   { pos: new THREE.Vector3(0, 6.2, 14.8), look: new THREE.Vector3(0, 1.25, 0) },
-  {
-    pos: new THREE.Vector3(-7, 5.5, 12),
-    look: new THREE.Vector3(0, 1.25, 0),
-  },
-  {
-    pos: new THREE.Vector3(7, 5.5, 12),
-    look: new THREE.Vector3(0, 1.25, 0),
-  },
-  {
-    pos: new THREE.Vector3(0, 9, 8),
-    look: new THREE.Vector3(0, 1.2, 1.5),
-  },
+  { pos: new THREE.Vector3(-7, 5.5, 12), look: new THREE.Vector3(0, 1.25, 0) },
+  { pos: new THREE.Vector3(7, 5.5, 12), look: new THREE.Vector3(0, 1.25, 0) },
+  { pos: new THREE.Vector3(0, 9, 8), look: new THREE.Vector3(0, 1.2, 1.5) },
 ];
 
 function setCameraMode(mode) {
@@ -609,36 +618,34 @@ const clock = new THREE.Clock();
 function animate() {
   requestAnimationFrame(animate);
   const t = clock.getElapsedTime();
-  const delta = clock.getDelta();
 
-  // Gentle idle bob for animals
+  // FIX #4 – apply offsets so hops/celebrations are visible
   animalGroups.forEach((a, i) => {
     if (a.userData.baseY !== undefined) {
       a.position.y =
-        a.userData.baseY + Math.sin(t * 1.5 + i * 1.2) * 0.04;
+        a.userData.baseY +
+        Math.sin(t * 1.5 + i * 1.2) * 0.04 +
+        (a.userData.yOffset || 0);
     }
-    // Slight rotation sway
-    a.rotation.y = Math.sin(t * 0.35 + i) * 0.04;
+    if (a.userData.baseX !== undefined) {
+      a.position.x = a.userData.baseX + (a.userData.xOffset || 0);
+    }
+    a.rotation.y = Math.sin(t * 0.35 + i) * 0.04 + (a.userData.rotOffset || 0);
   });
 
-  // Fireflies drift
   fireflies.forEach((f) => {
-    f.mesh.position.y =
-      f.base.y + Math.sin(t * 1.7 + f.phase) * 0.35;
-    f.mesh.position.x =
-      f.base.x + Math.cos(t + f.phase) * 0.2;
+    f.mesh.position.y = f.base.y + Math.sin(t * 1.7 + f.phase) * 0.35;
+    f.mesh.position.x = f.base.x + Math.cos(t + f.phase) * 0.2;
   });
 
-  // Pulse the current / reachable stones
+  // FIX #5 – pulse reachable stones on both human turns
   pathStones.forEach((p) => {
-    if (
-      p.number === state.total ||
-      (state.turn === 0 &&
-        !state.busy &&
-        !state.gameOver &&
-        state.moves.some((m) => p.number === state.total + m))
-    ) {
-      const pulse = 1 + Math.sin(t * 3.2) * 0.06;
+    const isCurrent = p.number === state.total;
+    const isReachable =
+      isHumanTurn() && state.moves.some((m) => p.number === state.total + m);
+    if (isCurrent || isReachable) {
+      const base = isCurrent ? 1.18 : 1;
+      const pulse = base * (1 + Math.sin(t * 3.2) * 0.06);
       p.stone.scale.setScalar(pulse);
       p.label.material.opacity = 0.75 + Math.sin(t * 4) * 0.25;
     } else {
@@ -646,9 +653,9 @@ function animate() {
     }
   });
 
-  // Smooth camera follow: gently look towards the current total
+  // FIX #8 – don't fight the win-camera zoom
   const currentStone = pathStones[state.total];
-  if (currentStone && cameraMode === 0) {
+  if (currentStone && cameraMode === 0 && !state.gameOver) {
     const targetX = currentStone.stone.position.x * 0.12;
     const targetLook = new THREE.Vector3(
       targetX,
@@ -667,27 +674,32 @@ animate();
 // GAME LOGIC
 // ============================================================
 
-function winningMoves(total, target, moves) {
-  return moves.filter(
-    (m) => total + m <= target && !isWinning(total + m, target, moves)
-  );
-}
-
+// FIX #1 – `win()` base case: reaching/passing the target means the CURRENT
+// player has already lost (the opponent got there first).
 function isWinning(total, target, moves) {
   if (total >= target) return false;
   const memo = {};
   function win(p) {
-    if (p >= target) return true;
+    if (p >= target) return false;              // <-- FIXED (was `true`)
     if (memo[p] !== undefined) return memo[p];
     return (memo[p] = moves.some((m) => p + m <= target && !win(p + m)));
   }
   return win(total);
 }
 
+function winningMoves(total, target, moves) {
+  return moves.filter(
+    (m) => total + m <= target && !isWinning(total + m, target, moves)
+  );
+}
+
+// FIX #2 – never return a move that would overshoot the target
 function bestComputerMove() {
+  const valid = state.moves.filter((m) => state.total + m <= state.target);
+  if (!valid.length) return null;
   const good = winningMoves(state.total, state.target, state.moves);
   if (state.opponent === 'easy' || !good.length) {
-    return state.moves[Math.floor(Math.random() * state.moves.length)];
+    return valid[Math.floor(Math.random() * valid.length)];
   }
   return good[Math.floor(Math.random() * good.length)];
 }
@@ -720,14 +732,15 @@ function playMove(amount, fromComputer = false) {
     total: state.total,
     computer: fromComputer,
   });
-  state.lastMove = amount;
+
+  // FIX #11 – clear stale hint on every move
+  $('hintText').hidden = true;
 
   playTone(fromComputer ? 440 : 620, 0.06);
   render();
   animateAnimalMove(state.turn, amount);
   updatePathVisuals();
 
-  // Bump the big total
   const totalEl = $('total');
   totalEl.classList.add('bump');
   setTimeout(() => totalEl.classList.remove('bump'), 220);
@@ -741,15 +754,21 @@ function playMove(amount, fromComputer = false) {
   render();
   updatePathVisuals();
 
-  // Computer turn
   if (state.opponent !== 'two' && state.turn === 1 && !state.gameOver) {
     state.busy = true;
     render();
-    setTimeout(() => {
+    // FIX #3 – store timer so we can cancel it
+    computerTimer = setTimeout(() => {
+      computerTimer = null;
       state.busy = false;
       if (state.gameOver) return;
       const move = bestComputerMove();
-      playMove(move, true);
+      if (move !== null && canMove(move)) {
+        playMove(move, true);
+      } else {
+        const fallback = state.moves.find((m) => canMove(m));
+        if (fallback !== undefined) playMove(fallback, true);
+      }
     }, 650);
   }
 }
@@ -761,50 +780,54 @@ function finishGame(winner) {
   stars++;
   $('starCount').textContent = stars;
 
-  const isHumanWinner = winner === 0;
-  const winnerName = isHumanWinner
-    ? 'Player 1'
-    : state.opponent === 'two'
-      ? 'Player 2'
-      : playerName(1);
+  const isHumanWin =
+    state.opponent === 'two' ? true : winner === 0;
+  const winnerName =
+    winner === 0
+      ? 'Player 1'
+      : state.opponent === 'two'
+        ? 'Player 2'
+        : playerName(1);
 
-  const title = isHumanWinner
-    ? 'You are the Jungle Champion!'
-    : state.opponent === 'two'
-      ? 'Player 2 wins this round!'
-      : `${playerName(1)} wins this round!`;
+  const title = isHumanWin
+    ? winner === 0
+      ? 'You are the Jungle Champion!'
+      : 'Player 2 wins this round!'
+    : `${winnerName} wins this round!`;
 
-  $('characterName').textContent = isHumanWinner
+  $('characterName').textContent = isHumanWin
     ? 'Jungle champion!'
     : `${winnerName} is the champion!`;
-  $('characterMood').textContent = isHumanWinner
+  $('characterMood').textContent = isHumanWin
     ? 'Brilliant strategy!'
     : 'Try again and discover a strategy!';
-  $('sceneTip').textContent = isHumanWinner
+  $('sceneTip').textContent = isHumanWin
     ? 'Fantastic thinking!'
     : 'The jungle champion is ready!';
 
   $('hintText').hidden = false;
-  $('hintText').textContent = isHumanWinner
+  $('hintText').textContent = isHumanWin
     ? '🏆 You reached the target! Think about which moves helped you win.'
     : state.opponent === 'two'
       ? '🏆 Player 2 reached the target first. Play another round!'
       : '🐯 Your opponent reached the target first. Replay and try a different strategy!';
 
   showToast(
-    isHumanWinner
+    isHumanWin
       ? `🎉 ${winnerName} wins! Great thinking!`
       : `🏆 ${winnerName} wins!`
   );
 
   addWinOverlay(
     title,
-    isHumanWinner
+    isHumanWin
       ? 'Try the next level or challenge a friend.'
       : 'You can learn from this round and try a new strategy.'
   );
 
-  // Camera zoom-in on win
+  playWinSound();
+
+  // Cinematic zoom on winning stone
   const currentStone = pathStones[state.total];
   if (currentStone) {
     camera.position.set(
@@ -815,9 +838,7 @@ function finishGame(winner) {
     camera.lookAt(currentStone.stone.position);
   }
 
-  // Animal celebration hop
-  const winnerAnimal = winner === 0 ? elephant : tiger;
-  celebrateAnimal(winnerAnimal);
+  celebrateAnimal(winner === 0 ? elephant : tiger);
 
   render();
   updatePathVisuals();
@@ -825,18 +846,21 @@ function finishGame(winner) {
 
 function addWinOverlay(title, sub) {
   sceneHost.querySelector('.win-overlay')?.remove();
+  const isPlayerWin = !title.includes('wins this round!') || title.includes('Jungle Champion');
+  const emoji = title.includes('Jungle Champion') || title.includes('Player 2') ? '🏆' : '🐯';
   const div = document.createElement('div');
   div.className = 'win-overlay';
-  div.innerHTML = `<div class="win-message"><div style="font-size:35px">${title.includes('Champion') ? '🏆' : '🐯'}</div><h3>${title}</h3><p>${sub}</p></div>`;
+  div.innerHTML = `<div class="win-message"><div style="font-size:35px">${emoji}</div><h3>${title}</h3><p>${sub}</p></div>`;
   sceneHost.appendChild(div);
 }
 
+// FIX #4 & #12 – hop via userData offsets so animate() doesn't overwrite
 function celebrateAnimal(animal) {
   let hops = 0;
   const interval = setInterval(() => {
-    animal.position.y = animal.userData.baseY + 0.4;
+    animal.userData.yOffset = 0.4;
     setTimeout(() => {
-      animal.position.y = animal.userData.baseY;
+      animal.userData.yOffset = 0;
     }, 150);
     hops++;
     if (hops >= 4) clearInterval(interval);
@@ -846,17 +870,16 @@ function celebrateAnimal(animal) {
 function animateAnimalMove(turn, move) {
   const animal = turn === 0 ? elephant : tiger;
   const direction = turn === 0 ? 1 : -1;
-  animal.position.x += direction * 0.25 * move;
-  animal.rotation.y += direction * 0.12;
-  setTimeout(() => {
-    animal.rotation.y = 0;
-  }, 450);
 
-  // A little hop
-  animal.position.y = animal.userData.baseY + 0.25;
+  animal.userData.xOffset = direction * 0.25 * move;
+  animal.userData.rotOffset = direction * 0.12;
+  animal.userData.yOffset = 0.25;
+
   setTimeout(() => {
-    animal.position.y = animal.userData.baseY;
-  }, 200);
+    animal.userData.xOffset = 0;
+    animal.userData.rotOffset = 0;
+    animal.userData.yOffset = 0;
+  }, 350);
 }
 
 // ---------- UI rendering ----------
@@ -963,6 +986,15 @@ function render() {
 
 // ---------- New game ----------
 function newGame(start = 0, challenge = null) {
+  // FIX #3 – cancel any pending computer move
+  if (computerTimer) {
+    clearTimeout(computerTimer);
+    computerTimer = null;
+  }
+
+  // Safety: start must be below target
+  if (start >= state.target) start = 0;
+
   state.total = start;
   state.startingTotal = start;
   state.turn = 0;
@@ -971,7 +1003,6 @@ function newGame(start = 0, challenge = null) {
   state.gameOver = false;
   state.busy = false;
   state.currentChallenge = challenge;
-  state.hintCount = 0;
 
   sceneHost.querySelector('.win-overlay')?.remove();
   $('hintText').hidden = true;
@@ -985,21 +1016,36 @@ function newGame(start = 0, challenge = null) {
   setCameraMode(0);
   buildNumberPath();
   render();
-
-  if (start >= state.target) {
-    showToast('Choose a starting total below the target.');
-  }
 }
 
 // ---------- Undo ----------
+// FIX #6 – if undo would leave us on the computer's turn, undo twice
 function undo() {
-  const snap = state.snapshots.pop();
-  if (!snap) return;
+  if (computerTimer) {
+    clearTimeout(computerTimer);
+    computerTimer = null;
+  }
+  if (!state.snapshots.length) return;
+
+  let snap = state.snapshots.pop();
   state.total = snap.total;
   state.turn = snap.turn;
   state.history = snap.history;
   state.gameOver = snap.gameOver;
   state.busy = false;
+
+  if (
+    state.turn === 1 &&
+    state.opponent !== 'two' &&
+    state.snapshots.length
+  ) {
+    snap = state.snapshots.pop();
+    state.total = snap.total;
+    state.turn = snap.turn;
+    state.history = snap.history;
+    state.gameOver = snap.gameOver;
+  }
+
   sceneHost.querySelector('.win-overlay')?.remove();
   $('hintText').hidden = true;
   setCameraMode(0);
@@ -1009,6 +1055,7 @@ function undo() {
 }
 
 // ---------- Hint ----------
+// FIX #10 – block hint during computer's turn
 function showHint() {
   if (state.gameOver) {
     $('hintText').hidden = false;
@@ -1016,6 +1063,11 @@ function showHint() {
       'Start a new game to receive a strategy hint.';
     return;
   }
+  if (!isHumanTurn()) {
+    showToast('Please wait for your turn.');
+    return;
+  }
+
   const good = winningMoves(state.total, state.target, state.moves);
   let text;
   if (!good.length) {
@@ -1028,22 +1080,19 @@ function showHint() {
   }
   $('hintText').hidden = false;
   $('hintText').textContent = '💡 ' + text;
-  state.hintCount++;
 
-  // Highlight the suggested stone
   const suggestedNumber = state.total + good[0];
   const suggestedStone = pathStones.find(
     (p) => p.number === suggestedNumber
   );
   if (suggestedStone) {
     suggestedStone.stone.material.emissiveIntensity = 1.4;
-    setTimeout(() => {
-      updatePathVisuals();
-    }, 1800);
+    setTimeout(() => updatePathVisuals(), 1800);
   }
 }
 
 // ---------- Reveal strategy ----------
+// FIX #7 – arrow before the target number
 function revealStrategy() {
   const target = state.target;
   const m = state.moves;
@@ -1055,28 +1104,29 @@ function revealStrategy() {
   const ex = $('strategyExplanation');
   ex.hidden = false;
   ex.className = 'strategy-explanation';
-  ex.innerHTML = `<strong>Teacher strategy note:</strong> For this target and move set, positions that are losing for the player to move are <strong>${losing.join(', ')}</strong>. Try to leave your opponent on one of these totals. Now replay and test whether this pattern works.`;
+  ex.innerHTML = `<strong>Teacher strategy note:</strong> For this target and move set, positions that are losing for the player to move are <strong>${losing.join(', ') || 'none'}</strong>. Try to leave your opponent on one of these totals. Now replay and test whether this pattern works.`;
 
-  $('strategySteps').innerHTML =
-    losing
-      .slice(0, 4)
-      .map((n) => `<span class="strategy-number">${n}</span>`)
-      .join('<span class="strategy-arrow">→</span>') +
-    `<span class="strategy-number">${target}</span>`;
+  const parts = losing
+    .slice(0, 4)
+    .map((n) => `<span class="strategy-number">${n}</span>`);
+  parts.push(`<span class="strategy-number">${target}</span>`);
+  $('strategySteps').innerHTML = parts.join(
+    '<span class="strategy-arrow">→</span>'
+  );
 }
 
 // ---------- Settings ----------
 function applySettings() {
   const target = Math.max(
     3,
-    Math.min(100, parseInt($('targetInput').value) || 10)
+    Math.min(100, parseInt($('targetInput').value, 10) || 10)
   );
   const moves = $('movesSelect')
     .value.split(',')
     .map(Number)
     .filter((n) => n > 0 && Number.isInteger(n));
   const opp = $('opponentSelect').value;
-  let start = Math.max(0, parseInt($('startInput').value) || 0);
+  let start = Math.max(0, parseInt($('startInput').value, 10) || 0);
   if (start >= target) start = 0;
 
   state.target = target;
@@ -1108,6 +1158,7 @@ function playTone(freq = 520, duration = 0.08) {
     audioCtx =
       audioCtx ||
       new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
     osc.type = 'sine';
@@ -1121,7 +1172,15 @@ function playTone(freq = 520, duration = 0.08) {
     gain.connect(audioCtx.destination);
     osc.start();
     osc.stop(audioCtx.currentTime + duration);
-  } catch (e) {}
+  } catch (e) {
+    /* Audio not available */
+  }
+}
+
+function playWinSound() {
+  playTone(523, 0.12);
+  setTimeout(() => playTone(659, 0.12), 110);
+  setTimeout(() => playTone(784, 0.2), 220);
 }
 
 // ---------- Toast ----------
@@ -1171,7 +1230,7 @@ $('modal').addEventListener('click', (e) => {
 
 document.querySelectorAll('[data-start]').forEach((b) =>
   b.addEventListener('click', () =>
-    setChallenge(parseInt(b.dataset.start))
+    setChallenge(parseInt(b.dataset.start, 10))
   )
 );
 
@@ -1187,8 +1246,8 @@ document.addEventListener('keydown', (e) => {
   } else if (key === 'r') {
     cycleCamera();
   } else if (/[1-4]/.test(key)) {
-    const m = parseInt(key);
-    if (state.moves.includes(m) && canMove(m)) {
+    const m = parseInt(key, 10);
+    if (state.moves.includes(m) && canMove(m) && isHumanTurn()) {
       playMove(m);
     }
   }

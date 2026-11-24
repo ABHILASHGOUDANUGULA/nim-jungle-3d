@@ -592,9 +592,6 @@ h1{
   .total-wrap{margin:10px 0}
   .big-total{font-size:48px}
 }
-/* ==============================
-   CREATOR CREDIT
-================================ */
 
 .creator-credit {
     width: 100%;
@@ -610,38 +607,24 @@ h1{
     gap: 3px;
     box-shadow: 0 5px 15px rgba(16, 59, 44, 0.12);
 }
-
 .creator-label {
     font-size: 9px;
     letter-spacing: 2.5px;
     font-weight: 800;
     color: #bce7c6;
 }
-
 .creator-credit strong {
     font-size: 16px;
     font-weight: 900;
     letter-spacing: 1px;
 }
-
 .creator-designation {
     font-size: 11px;
     font-weight: 700;
     color: #e0f1e4;
 }
-
-/* Mobile adjustment */
 @media (max-width: 560px) {
-    .creator-credit {
-        padding: 10px;
-        border-radius: 12px;
-    }
-
-    .creator-credit strong {
-        font-size: 14px;
-    }
-
-    .creator-designation {
-        font-size: 10px;
-    }
+    .creator-credit { padding: 10px; border-radius: 12px; }
+    .creator-credit strong { font-size: 14px; }
+    .creator-designation { font-size: 10px; }
 }
